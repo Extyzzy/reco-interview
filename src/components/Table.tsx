@@ -1,5 +1,4 @@
 import { useState } from 'react';
-
 import {
   useReactTable,
   ColumnDef,
@@ -9,13 +8,14 @@ import {
   HeaderGroup,
   Row,
   PaginationState,
+  getFilteredRowModel,
+  ColumnFiltersState,
 } from '@tanstack/react-table';
-import Pagination from './Pagination';
 
 interface TableProps<TData> {
   data: TData[];
   columns: ColumnDef<TData, never>[];
-  pageSizeOptions?: number[]; // Optional prop to customize page size options
+  pageSizeOptions?: number[];
 }
 
 export const Table = <TData,>({
@@ -28,25 +28,24 @@ export const Table = <TData,>({
     pageSize: pageSizeOptions[0],
   });
 
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
   const table = useReactTable({
     data,
-    //@ts-ignore
     columns,
     state: {
       pagination,
+      columnFilters,
     },
-    onStateChange: updater => {
-      const newState =
-        //@ts-ignore
-        typeof updater === 'function' ? updater(pagination) : updater;
-      setPagination(newState.pagination || pagination);
-    },
+    onPaginationChange: setPagination,
+    onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const handlePageChange = (newPageIndex: number) => {
-    setPagination(prev => ({ ...prev, pageIndex: newPageIndex }));
+  const handleResetFilters = () => {
+    setColumnFilters([]); // Clear all column filters
   };
 
   return (
@@ -61,12 +60,43 @@ export const Table = <TData,>({
                   className="px-6 py-3 text-left bg-gray-800 text-white border-b border-gray-300"
                 >
                   {header.isPlaceholder ? null : (
-                    <p className="text-sm font-semibold">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext(),
-                      )}
-                    </p>
+                    <>
+                      <p className="text-sm font-semibold">
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                      </p>
+                      {/* Column Filter Input */}
+                      <div>
+                        <input
+                          type="text"
+                          value={
+                            columnFilters.find(
+                              filter => filter.id === header.id,
+                            )?.value || ''
+                          }
+                          onChange={e => {
+                            const value = e.target.value;
+                            setColumnFilters(prev => {
+                              const existingFilter = prev.find(
+                                filter => filter.id === header.id,
+                              );
+                              if (existingFilter) {
+                                return prev.map(filter =>
+                                  filter.id === header.id
+                                    ? { ...filter, value }
+                                    : filter,
+                                );
+                              }
+                              return [...prev, { id: header.id, value }];
+                            });
+                          }}
+                          placeholder={`Filter ${header.column.columnDef.header}`}
+                          className="px-2 py-1 text-sm border rounded"
+                        />
+                      </div>
+                    </>
                   )}
                 </th>
               ))}
@@ -77,7 +107,7 @@ export const Table = <TData,>({
           {table.getRowModel().rows.map((row: Row<TData>) => (
             <tr
               key={row.id}
-              className="hover:border-gray-800 hover:bg-gray-100 transition-colors duration-150 !rounded-b-3xl border-b"
+              className="hover:border-gray-800 hover:bg-gray-100 transition-colors duration-150 border-b"
             >
               {row.getVisibleCells().map(cell => (
                 <td
@@ -92,16 +122,41 @@ export const Table = <TData,>({
         </tbody>
       </table>
 
-      {table.getPageCount() > 1 && (
-        <Pagination
-          align="center"
-          defaultPageSize={pagination.pageSize}
-          showTotal={(total: number) => `Total ${total}`}
-          total={table.getPageCount()}
-          current={pagination.pageIndex}
-          onChange={handlePageChange}
-        />
-      )}
+      <div className="p-4 bg-white border-t border-gray-300 flex justify-between items-center">
+        <div className="flex gap-2">
+          <button
+            onClick={() => table.previousPage()}
+            disabled={!table.getCanPreviousPage()}
+            className="px-4 py-2 border rounded disabled:opacity-50"
+          >
+            Previous
+          </button>
+          {Array.from({ length: table.getPageCount() }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => table.setPageIndex(i)}
+              className={`px-4 py-2 border rounded ${pagination.pageIndex === i ? 'bg-gray-800 text-white' : ''}`}
+            >
+              {i + 1}
+            </button>
+          ))}
+          <button
+            onClick={() => table.nextPage()}
+            disabled={!table.getCanNextPage()}
+            className="px-4 py-2 border rounded disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+
+        {/* Reset Filters Button */}
+        <button
+          onClick={handleResetFilters}
+          className="px-4 py-2 bg-red-500 text-white rounded disabled:opacity-50"
+        >
+          Reset Filters
+        </button>
+      </div>
     </div>
   );
 };
